@@ -1,8 +1,10 @@
 node_modules/
+reverse_eng/
+build/
+coverage/
+
 .DS_Store
-test.js
-test_2.js
-.prettierrc.js
 *.csv
 *.zip
-reverse_eng/
+ex.js
+ex.ts
