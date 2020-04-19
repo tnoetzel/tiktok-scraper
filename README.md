@@ -1,6 +1,6 @@
 # TikTok Scraper & Downloader
 
-![NPM](https://img.shields.io/npm/l/tiktok-scraper.svg?style=for-the-badge) ![npm](https://img.shields.io/npm/v/tiktok-scraper.svg?style=for-the-badge) ![Codacy grade](https://img.shields.io/codacy/grade/b3ef17f5a8504600931abfa60ac01006.svg?style=for-the-badge)
+![NPM](https://img.shields.io/npm/l/tiktok-scraper.svg?style=for-the-badge) ![npm](https://img.shields.io/npm/v/tiktok-scraper.svg?style=for-the-badge) ![Codacy grade](https://img.shields.io/codacy/grade/b3ef17f5a8504600931abfa60ac01006.svg?style=for-the-badge) ![CI](https://img.shields.io/github/workflow/status/drawrowfly/tiktok-scraper/CI?style=for-the-badge)
 
 Scrape and download useful information from TikTok.
 
@@ -33,7 +33,9 @@ This is not an official API support and etc. This is just a scraper that is usin
 -   [x] Add tests
 -   [x] Download video without the watermark
 -   [x] Indicate in the output file(csv/json) if the video was downloaded or not
+-   [x] Build and run from Docker
 -   [ ] Scrape metadata and download posts from different users/hashtags in batch
+-   [ ] Download audio files
 -   [ ] Scrape users/hashtags
 -   [ ] Web interface
 
@@ -73,9 +75,16 @@ yarn build
         musicId: '6808098113188120838',
         musicName: 'blah blah',
         musicAuthor: 'blah',
-        musicOriginal: true
+        musicOriginal: true,
+        playUrl: 'SOUND/MUSIC_URL',
+    },
+    covers:{
+        default: 'COVER_URL',
+        origin: 'COVER_URL',
+        dynamic: 'COVER_URL'
     },
     imageUrl:'IMAGE_URL',
+    webVideoUrl:'https://www.tiktok.com/@USER/video/VIDEO_ID',
     videoUrl:'VIDEO_URL',
     videoUrlNoWaterMark:'VIDEO_URL_WITHOUT_THE_WATERMARK',
     videoMeta: { width: 480, height: 864, ratio: 14, duration: 14 },
@@ -98,7 +107,7 @@ yarn build
 
 ![Demo](https://i.imgur.com/6gIbBzo.png)
 
-## View and manage previously downloaded posts history in the CLI
+## View and manage previously downloaded posts history from the CLI
 
 ![History](https://i.imgur.com/VnDKh72.png)
 
@@ -119,6 +128,13 @@ tiktok-scraper history -r TYPE:INPUT
 tiktok-scraper history -r user:tiktok
 tiktok-scraper history -r hashtag:summer
 tiktok-scraper history -r trend
+```
+
+Set custom path where history files will be stored.
+**NOTE: After setting the custom path you will have to specify it all the time so that the scraper knows the file location**
+
+```
+tiktok-scraper hashtag summer -s -d -n 10 --historypath /Blah/Blah/Blah
 ```
 
 To delete all records:
@@ -179,14 +195,18 @@ Options:
                           'json' and 'csv'
                                 [choices: "csv", "json", "all"] [default: "csv"]
   --filename, -f          Set custom filename for the output files [default: ""]
+  --noWaterMark, -w       Download video without the watermark. This option will
+                          affect the execution speed  [boolean] [default: false]
   --store, -s             Scraper will save the progress in the OS TMP folder
                           and in the future usage will only download new videos
                           avoiding duplicates         [boolean] [default: false]
-  --noWaterMark, -w       Download video without the watermark. This option will
-                          affect the execution speed  [boolean] [default: false]
+  --historypath           Set custom path where history file/files will be
+                          stored
+                   [default: "/var/folders/blah/blah/blah"]
   --remove, -r            Delete the history record by entering "TYPE:INPUT" or
                           "all" to clean all the history. For example: user:bob
                                                                    [default: ""]
+  --help                  Show help                                    [boolean]
 
 Examples:
   tiktok-scraper user USERNAME -d -n 100
@@ -200,6 +220,8 @@ Examples:
   tiktok-scraper history -r user:bob
   tiktok-scraper history -r all
 ```
+
+**AGAIN FOR THOSE WHO DO NOT READ THOROUGHLY: After setting the custom History File path you will have to specify it all the time so that the scraper knows the file location**
 
 **Example 1:**
 Scrape 300 video posts from user {USERNAME}. Save post info in to a CSV file (by default)
@@ -288,6 +310,32 @@ View previous download history
 
 ```sh
 tiktok-scraper history
+```
+
+## Docker
+
+By using docker you won't be able to use --filepath and --historypath , but you can set volume(**host path where all files will be saved**) by using -v
+
+##### Build
+
+```sh
+docker build . -t tiktok-scraper
+```
+
+##### Run
+
+**Example 1:**
+All files including history file will be saved in the directory(\$pwd) where you running the docker from
+
+```sh
+docker run -v $(pwd):/usr/app/files tiktok-scraper user tiktok -d -n 5 -s
+```
+
+**Example 2:**
+All files including history file will be saved in /User/blah/downloads
+
+```sh
+docker run -v /User/blah/downloads:/usr/app/files tiktok-scraper user tiktok -d -n 5 -s
 ```
 
 ## Module
@@ -429,7 +477,13 @@ const rp = require('request-promise');
             musicId: '6808098113188120838',
             musicName: 'blah blah',
             musicAuthor: 'blah',
-            musicOriginal: true
+            musicOriginal: true,
+            playUrl: 'SOUND/MUSIC_URL',
+        },
+        covers:{
+            default: 'COVER_URL',
+            origin: 'COVER_URL',
+            dynamic: 'COVER_URL'
         },
         imageUrl:'IMAGE_URL',
         videoUrl:'VIDEO_URL',
@@ -440,11 +494,12 @@ const rp = require('request-promise');
         playCount: 9007,
         commentCount: 50,
         hashtags:
-        [{ id: '69573911',
-           name: 'PlayWithLife',
-           title: 'HASHTAG_TITLE',
-           cover: [Array]
-        }],
+        [{
+            id: '69573911',
+            name: 'PlayWithLife',
+            title: 'HASHTAG_TITLE',
+            cover: [Array]
+        }...],
         downloaded: true
     }...],
     //If {filetype} and {download} options are enbabled then:
@@ -507,6 +562,11 @@ const rp = require('request-promise');
     imageUrl: 'IMAGE_URL',
     videoUrl: 'VIDEO_URL',
     videoUrlNoWaterMark: 'VIDEO_URL_WITHOUT_THE_WATERMARK',
+    videoMeta: { width: 480, height: 864, ratio: 14, duration: 14 },
+    covers:{
+        default: 'COVER_URL',
+        origin: 'COVER_URL'
+    },
     diggCount: 49292,
     shareCount: 339,
     playCount: 614678,

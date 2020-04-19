@@ -57,7 +57,7 @@ export class TikTokScraper extends EventEmitter {
 
     private storeHistory: boolean;
 
-    private tmpFolder: string;
+    private historyPath: string;
 
     private fileName: () => string;
 
@@ -92,6 +92,7 @@ export class TikTokScraper extends EventEmitter {
         type,
         by_user_id = false,
         store_history = false,
+        historyPath = '',
         userAgent,
         test = false,
         noWaterMark = false,
@@ -101,7 +102,7 @@ export class TikTokScraper extends EventEmitter {
         this.mainHost = 'https://m.tiktok.com/';
         this.userAgent = userAgent || CONST.userAgent;
         this.download = download;
-        this.filepath = '' || filepath;
+        this.filepath = process.env.SCRAPING_FROM_DOCKER ? '/usr/app/files' : filepath || '';
         this.json2csvParser = new Parser({ flatten: true });
         this.filetype = filetype;
         this.input = input;
@@ -125,7 +126,7 @@ export class TikTokScraper extends EventEmitter {
         this.spinner = ora('TikTok Scraper Started');
         this.byUserId = by_user_id;
         this.storeHistory = cli && download && store_history;
-        this.tmpFolder = tmpdir();
+        this.historyPath = process.env.SCRAPING_FROM_DOCKER ? '/usr/app/files' : historyPath || tmpdir();
         this.fileName = (): string => {
             if (fileName) {
                 return fileName;
@@ -149,6 +150,7 @@ export class TikTokScraper extends EventEmitter {
             test,
             noWaterMark,
             userAgent,
+            filepath,
         });
     }
 
@@ -443,7 +445,7 @@ export class TikTokScraper extends EventEmitter {
             let history = {} as History;
 
             try {
-                const readFromStore = (await fromCallback(cb => readFile(`${this.tmpFolder}/tiktok_history.json`, { encoding: 'utf-8' }, cb))) as string;
+                const readFromStore = (await fromCallback(cb => readFile(`${this.historyPath}/tiktok_history.json`, { encoding: 'utf-8' }, cb))) as string;
                 history = JSON.parse(readFromStore);
             } catch (error) {
                 history[historyType] = {
@@ -451,7 +453,7 @@ export class TikTokScraper extends EventEmitter {
                     input: this.input,
                     downloaded_posts: 0,
                     last_change: new Date(),
-                    file_location: `${this.tmpFolder}/${this.storeValue}.json`,
+                    file_location: `${this.historyPath}/${this.storeValue}.json`,
                 };
             }
 
@@ -461,12 +463,12 @@ export class TikTokScraper extends EventEmitter {
                     input: this.input,
                     downloaded_posts: 0,
                     last_change: new Date(),
-                    file_location: `${this.tmpFolder}/${this.storeValue}.json`,
+                    file_location: `${this.historyPath}/${this.storeValue}.json`,
                 };
             }
             let store: string[];
             try {
-                const readFromStore = (await fromCallback(cb => readFile(`${this.tmpFolder}/${this.storeValue}.json`, { encoding: 'utf-8' }, cb))) as string;
+                const readFromStore = (await fromCallback(cb => readFile(`${this.historyPath}/${this.storeValue}.json`, { encoding: 'utf-8' }, cb))) as string;
                 store = JSON.parse(readFromStore);
             } catch (error) {
                 store = [];
@@ -488,17 +490,17 @@ export class TikTokScraper extends EventEmitter {
                 input: this.input,
                 downloaded_posts: history[historyType].downloaded_posts + this.collector.length,
                 last_change: new Date(),
-                file_location: `${this.tmpFolder}/${this.storeValue}.json`,
+                file_location: `${this.historyPath}/${this.storeValue}.json`,
             };
 
             try {
-                await fromCallback(cb => writeFile(`${this.tmpFolder}/${this.storeValue}.json`, JSON.stringify(store), cb));
+                await fromCallback(cb => writeFile(`${this.historyPath}/${this.storeValue}.json`, JSON.stringify(store), cb));
             } catch (error) {
                 // continue regardless of error
             }
 
             try {
-                await fromCallback(cb => writeFile(`${this.tmpFolder}/tiktok_history.json`, JSON.stringify(history), cb));
+                await fromCallback(cb => writeFile(`${this.historyPath}/tiktok_history.json`, JSON.stringify(history), cb));
             } catch (error) {
                 // continue regardless of error
             }
@@ -538,8 +540,15 @@ export class TikTokScraper extends EventEmitter {
                         musicName: posts[i].musicInfos.musicName,
                         musicAuthor: posts[i].musicInfos.authorName,
                         musicOriginal: posts[i].musicInfos.original,
+                        playUrl: posts[i].musicInfos.playUrl[0],
+                    },
+                    covers: {
+                        default: posts[i].itemInfos.covers[0],
+                        origin: posts[i].itemInfos.coversOrigin[0],
+                        dynamic: posts[i].itemInfos.coversDynamic[0],
                     },
                     imageUrl: posts[i].itemInfos.coversOrigin[0],
+                    webVideoUrl: `https://www.tiktok.com/@${posts[i].authorInfos.uniqueId}/video/${posts[i].itemInfos.id}`,
                     videoUrl: posts[i].itemInfos.video.urls[0],
                     videoUrlNoWaterMark: '',
                     videoMeta: posts[i].itemInfos.video.videoMeta,
@@ -571,7 +580,7 @@ export class TikTokScraper extends EventEmitter {
         const signature = generateSignature(
             `${this.mainHost}share/item/list?secUid=${qs.secUid}&id=${qs.id}&type=${qs.type}&count=${qs.count}&minCursor=${
                 qs.minCursor
-            }&maxCursor=${maxCursor || 0}${shareUid}&lang=${qs.lang}`,
+            }&maxCursor=${maxCursor || 0}${shareUid}&lang=${qs.lang}&shareUid=${qs.shareUid}&verifyFp=${qs.verifyFp}`,
             this.userAgent,
             this.tacValue,
         );
@@ -618,6 +627,7 @@ export class TikTokScraper extends EventEmitter {
             type: 5,
             count: 30,
             minCursor: 0,
+            verifyFp: '',
         };
     }
 
@@ -633,6 +643,7 @@ export class TikTokScraper extends EventEmitter {
             type: 4,
             count: 30,
             minCursor: 0,
+            verifyFp: '',
         };
     }
 
@@ -648,10 +659,12 @@ export class TikTokScraper extends EventEmitter {
                 count: 30,
                 minCursor: 0,
                 lang: '',
+                verifyFp: '',
+                shareUid: '',
             };
         }
         const query = {
-            uri: `${this.mainHost}node/share/tag/${this.input}`,
+            uri: `${this.mainHost}node/share/tag/${encodeURIComponent(this.input)}`,
             method: 'GET',
             json: true,
         };
@@ -668,6 +681,8 @@ export class TikTokScraper extends EventEmitter {
                 count: 30,
                 minCursor: 0,
                 lang: '',
+                verifyFp: '',
+                shareUid: '',
             };
         } catch (error) {
             throw error.message;
@@ -686,11 +701,13 @@ export class TikTokScraper extends EventEmitter {
                 count: 30,
                 minCursor: 0,
                 lang: '',
+                verifyFp: '',
+                shareUid: '',
             };
         }
 
         const query = {
-            uri: `${this.mainHost}node/share/user/@${this.input}`,
+            uri: `${this.mainHost}node/share/user/@${encodeURIComponent(this.input)}`,
             method: 'GET',
             json: true,
         };
@@ -708,6 +725,8 @@ export class TikTokScraper extends EventEmitter {
                 count: 30,
                 minCursor: 0,
                 lang: '',
+                verifyFp: '',
+                shareUid: '',
             };
         } catch (error) {
             throw error.message;
@@ -784,8 +803,8 @@ export class TikTokScraper extends EventEmitter {
         if (!this.input) {
             throw `Url is missing`;
         }
-        if (!/^https:\/\/www\.tiktok\.com\/@(\w.+)\/video\/(\d+)$/.test(this.input)) {
-            throw `Bad url format. Correct format: https://www.tiktok.com/@USERNAME/video/ID`;
+        if (!/^https:\/\/(www|v[a-z]{1})+\.tiktok\.com\/(\w.+|@(\w.+)\/video\/(\d+))$/.test(this.input)) {
+            throw `Not supported url format`;
         }
         const query = {
             uri: this.input,
@@ -822,6 +841,11 @@ export class TikTokScraper extends EventEmitter {
                     imageUrl: videoProps.props.pageProps.videoData.itemInfos.coversOrigin[0],
                     videoUrl: videoProps.props.pageProps.videoData.itemInfos.video.urls[0],
                     videoUrlNoWaterMark: '',
+                    videoMeta: videoProps.props.pageProps.videoData.itemInfos.video.videoMeta,
+                    covers: {
+                        default: videoProps.props.pageProps.videoData.itemInfos.covers[0],
+                        origin: videoProps.props.pageProps.videoData.itemInfos.coversOrigin[0],
+                    },
                     diggCount: videoProps.props.pageProps.videoData.itemInfos.diggCount,
                     shareCount: videoProps.props.pageProps.videoData.itemInfos.shareCount,
                     playCount: videoProps.props.pageProps.videoData.itemInfos.playCount,
